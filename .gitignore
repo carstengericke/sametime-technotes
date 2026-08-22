@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Logs
+*.log
+
+# Secrets / local configuration
+.env
+*.env.local
+*.secret
+*.secrets
+
+# Certificates and private keys
+*.p12
+*.pfx
+*.jks
+*.key
+*.pem
+*.crt
+*.cer
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
