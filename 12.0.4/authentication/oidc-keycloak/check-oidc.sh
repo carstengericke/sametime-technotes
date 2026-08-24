@@ -129,11 +129,37 @@ OIDC_ISSUER_URI="$(get_value "$CUSTOM_ENV" "OIDC_ISSUER_URI")"
 OIDC_AUTHORIZATION_URL="$(get_value "$CUSTOM_ENV" "OIDC_AUTHORIZATION_URL")"
 OIDC_TOKEN_URL="$(get_value "$CUSTOM_ENV" "OIDC_TOKEN_URL")"
 OIDC_USER_INFO_URL="$(get_value "$CUSTOM_ENV" "OIDC_USER_INFO_URL")"
+OIDC_SCOPES="$(get_value "$CUSTOM_ENV" "OIDC_SCOPES")"
 
 IDP_URL="$(get_value "$CUSTOM_ENV" "IDP_URL")"
 AUTH_TOKEN="$(get_value "$CUSTOM_ENV" "STI__ST_BB_NAMES__ST_AUTH_TOKEN")"
 
 STCONF_IDPURL="$(get_value "$ENV_FILE" "STCONF_IDPURL")"
+
+if [[ -n "$OIDC_SCOPES" ]]; then
+    ok "OIDC_SCOPES ist gesetzt"
+    info "OIDC_SCOPES=$OIDC_SCOPES"
+
+    if echo " $OIDC_SCOPES " | grep -qE '(^|[ ,])openid([ ,]|$)'; then
+        ok "OIDC_SCOPES enthält openid"
+    else
+        error "OIDC_SCOPES enthält openid nicht"
+    fi
+
+    if echo " $OIDC_SCOPES " | grep -qE '(^|[ ,])email([ ,]|$)'; then
+        ok "OIDC_SCOPES enthält email"
+    else
+        warn "OIDC_SCOPES enthält email nicht"
+    fi
+
+    if echo " $OIDC_SCOPES " | grep -qE '(^|[ ,])profile([ ,]|$)'; then
+        ok "OIDC_SCOPES enthält profile"
+    else
+        warn "OIDC_SCOPES enthält profile nicht"
+    fi
+else
+    error "OIDC_SCOPES ist nicht gesetzt"
+fi
 
 case "${STCONF_ISOIDC,,}" in
     true|yes|1)
@@ -224,7 +250,7 @@ fi
 #
 
 echo
-echo "3. SAML deaktiviert"
+echo "3. Authentifizierungsmodus / Mobile OIDC"
 echo "------------------------------------------------------------"
 
 if [[ -z "$IDP_URL" ]]; then
@@ -233,10 +259,17 @@ else
     error "IDP_URL ist noch gesetzt: $IDP_URL"
 fi
 
-if [[ -z "$STCONF_IDPURL" ]]; then
-    ok "STCONF_IDPURL ist leer"
+if [[ -n "$STCONF_IDPURL" ]]; then
+    ok "STCONF_IDPURL ist gesetzt"
+    info "STCONF_IDPURL=$STCONF_IDPURL"
+
+    if [[ "$STCONF_IDPURL" == *"/sametime-auth/api/v1/oidc/login" ]]; then
+        ok "STCONF_IDPURL verweist auf den Sametime OIDC Login"
+    else
+        error "STCONF_IDPURL verweist nicht auf /sametime-auth/api/v1/oidc/login"
+    fi
 else
-    error "STCONF_IDPURL ist noch gesetzt: $STCONF_IDPURL"
+    error "STCONF_IDPURL ist nicht gesetzt - für OIDC/Mobile erforderlich"
 fi
 
 if [[ -n "$AUTH_TOKEN" ]]; then
@@ -628,15 +661,13 @@ if [[ -n "$SAMETIME_URL" ]]; then
                 info "proxyinfo:    $OIDC_ISSUER_REMOTE"
             fi
 
-            if [[ "$IDP_REMOTE" == *"/sametime-auth/api/v1/oidc/login"* ]]; then
+            if [[ "$IDP_REMOTE" == *"/sametime-auth/api/v1/oidc/login" ]]; then
                 ok "proxyinfo: IDPUrl verweist auf Sametime OIDC Login"
                 info "IDPUrl=$IDP_REMOTE"
             elif [[ -z "$IDP_REMOTE" ]]; then
-		ok "proxyinfo: IDPUrl ist bei OIDC leer"
-            elif echo "$IDP_REMOTE" | grep -q '/protocol/saml/'; then
-                error "proxyinfo: IDPUrl verweist noch auf SAML: $IDP_REMOTE"
+                error "proxyinfo: IDPUrl ist leer - für OIDC/Mobile muss STCONF_IDPURL gesetzt sein"
             else
-                warn "proxyinfo: Unerwartete IDPUrl: $IDP_REMOTE"
+                error "proxyinfo: Unerwartete IDPUrl: $IDP_REMOTE"
             fi
 
             if [[ "$COMMUNITY_CONNECTED" == "true" ]]; then

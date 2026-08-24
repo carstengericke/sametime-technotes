@@ -12,6 +12,8 @@ Die Konfiguration ermöglicht die Authentifizierung von Sametime-Benutzern über
 
 > **Wichtig:** SAML und OIDC sollten nicht miteinander vermischt werden. Für die hier beschriebene Konfiguration wird ausschließlich **OIDC** verwendet. Eventuell vorhandene SAML-Konfigurationen müssen deaktiviert werden.
 
+Für Mobile Clients ist zusätzlich wichtig, dass `STCONF_IDPURL` auf den Sametime-internen OIDC-Login-Endpunkt zeigt. Der Mobile Client wird also nicht direkt auf den Keycloak-OIDC-Endpunkt gelenkt, sondern zunächst auf den Sametime-Auth-Service.
+
 ---
 
 ## 2. Voraussetzungen
@@ -79,16 +81,23 @@ grep -Ei 'OIDC|STCONF|IDP_URL|SAML|AUTH_TOKEN' \
 
 Bei einer reinen OIDC-Konfiguration dürfen insbesondere keine aktiven SAML-Einstellungen mehr verwendet werden.
 
-Zu prüfen sind beispielsweise:
+Insbesondere darf `IDP_URL` nicht mehr auf einen SAML-Endpunkt zeigen.
+
+Nicht geeignet wäre beispielsweise:
+
+```ini
+IDP_URL=https://keycloak.example.com/realms/example/protocol/saml/clients/sametime
+```
+
+Für OIDC sollte `IDP_URL` leer sein:
 
 ```ini
 IDP_URL=
-STCONF_IDPURL=
 ```
 
 Außerdem darf `Saml` nicht mehr im Authentifizierungs-Token enthalten sein.
 
-Nicht für eine reine OIDC-Konfiguration geeignet wäre beispielsweise:
+Nicht geeignet:
 
 ```ini
 STI__ST_BB_NAMES__ST_AUTH_TOKEN=Fork:Jwt,Saml
@@ -127,7 +136,25 @@ hinterlegt.
 
 > **Sicherheit:** Das Client Secret darf nicht in öffentliche Git-Repositories, Dokumentationen oder Support-Ausgaben übernommen werden.
 
-Die konkreten Redirect-URIs und Web Origins müssen entsprechend der Sametime-URL und der verwendeten Keycloak-Konfiguration eingerichtet werden.
+Der Sametime OIDC Callback lautet typischerweise:
+
+```text
+https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/cb
+```
+
+Dieser Endpunkt muss in Keycloak als gültige Redirect URI erlaubt sein.
+
+Beispiel:
+
+```text
+https://sametime.example.com/sametime-auth/api/v1/oidc/cb
+```
+
+Als Web Origin wird üblicherweise der Sametime-Host verwendet:
+
+```text
+https://sametime.example.com
+```
 
 ---
 
@@ -187,12 +214,11 @@ OIDC_CLIENT_ID=<CLIENT-ID>
 OIDC_CLIENT_SECRET=<CLIENT-SECRET>
 
 OIDC_ISSUER_URI=https://<KEYCLOAK>/realms/<REALM>
-
 OIDC_AUTHORIZATION_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/auth
-
 OIDC_TOKEN_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/token
-
 OIDC_USER_INFO_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/userinfo
+
+OIDC_SCOPES=openid email profile
 ```
 
 Beispiel:
@@ -204,12 +230,11 @@ OIDC_CLIENT_ID=sametime
 OIDC_CLIENT_SECRET=<CLIENT-SECRET>
 
 OIDC_ISSUER_URI=https://keycloak.example.com/realms/example
-
 OIDC_AUTHORIZATION_URL=https://keycloak.example.com/realms/example/protocol/openid-connect/auth
-
 OIDC_TOKEN_URL=https://keycloak.example.com/realms/example/protocol/openid-connect/token
-
 OIDC_USER_INFO_URL=https://keycloak.example.com/realms/example/protocol/openid-connect/userinfo
+
+OIDC_SCOPES=openid email profile
 ```
 
 > **Wichtig:** `OIDC_ISSUER_URI` ist der Realm-Issuer. Dort darf nicht versehentlich der Authorization- oder Token-Endpoint eingetragen werden.
@@ -218,6 +243,12 @@ Der korrekte Wert hat bei Keycloak typischerweise die Form:
 
 ```text
 https://<KEYCLOAK>/realms/<REALM>
+```
+
+`OIDC_SCOPES` sollte mindestens `openid` enthalten. Für Sametime Mobile ist die folgende Konfiguration sinnvoll:
+
+```ini
+OIDC_SCOPES=openid email profile
 ```
 
 ---
@@ -255,9 +286,9 @@ STI__ST_BB_NAMES__ST_AUTH_TOKEN=Fork:Jwt
 
 ---
 
-## 9. SAML IdP URLs deaktivieren
+## 9. IdP-URLs für OIDC und Mobile konfigurieren
 
-Bei einer reinen OIDC-Konfiguration dürfen die zuvor für SAML verwendeten IdP-URLs nicht mehr aktiv sein.
+Bei OIDC müssen SAML-IdP-URLs entfernt werden.
 
 In `custom.env`:
 
@@ -265,10 +296,18 @@ In `custom.env`:
 IDP_URL=
 ```
 
+Für Mobile Clients muss jedoch `STCONF_IDPURL` gesetzt sein.
+
 In `.env`:
 
 ```ini
-STCONF_IDPURL=
+STCONF_IDPURL=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+```
+
+Beispiel:
+
+```ini
+STCONF_IDPURL=https://sametime.example.com/sametime-auth/api/v1/oidc/login
 ```
 
 Kontrolle:
@@ -282,7 +321,33 @@ Erwartetes Ergebnis:
 
 ```text
 IDP_URL=
-STCONF_IDPURL=
+STCONF_IDPURL=https://sametime.example.com/sametime-auth/api/v1/oidc/login
+```
+
+> **Wichtig für Mobile Clients:** Bei OIDC darf `STCONF_IDPURL` nicht auf Keycloak direkt zeigen. Der Wert muss auf den Sametime OIDC Login zeigen:
+
+```text
+https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+```
+
+Der Ablauf ist damit:
+
+```text
+Sametime Mobile Client
+        |
+        v
+Sametime /stwebapi/proxyinfo
+        |
+        | IDPUrl
+        v
+Sametime Auth Service
+        |
+        | OIDC
+        v
+Keycloak
+        |
+        v
+Sametime
 ```
 
 ---
@@ -319,6 +384,13 @@ volumes:
   - ./samltruststore.p12:/local/notesdata/samltruststore.p12
 ```
 
+oder beispielsweise:
+
+```yaml
+volumes:
+  - ./saml/samltruststore.p12:/local/notesdata/samltruststore.p12
+```
+
 Dieser Mount wird für OIDC nicht benötigt und sollte aus der OIDC-Konfiguration entfernt werden.
 
 Die Datei selbst kann für eine spätere Rückkehr zur SAML-Konfiguration auf dem Host aufbewahrt werden.
@@ -341,6 +413,7 @@ OIDC_ISSUER_URI=https://<KEYCLOAK>/realms/<REALM>
 OIDC_AUTHORIZATION_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/auth
 OIDC_TOKEN_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/token
 OIDC_USER_INFO_URL=https://<KEYCLOAK>/realms/<REALM>/protocol/openid-connect/userinfo
+OIDC_SCOPES=openid email profile
 
 STI__ST_BB_NAMES__ST_AUTH_TOKEN=Fork:Jwt
 
@@ -350,12 +423,12 @@ IDP_URL=
 ### `.env`
 
 ```ini
-STCONF_IDPURL=
+STCONF_IDPURL=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
 ```
 
 ### `docker-compose.yml`
 
-Im Community-Service darf nur die für OIDC benötigte Environment-Datei eingebunden sein:
+Im Community-Service darf nur die normale Sametime Environment-Datei eingebunden sein:
 
 ```yaml
 community:
@@ -391,7 +464,7 @@ Anschließend gezielt nach Authentifizierungseinstellungen suchen:
 
 ```bash
 grep -nEi \
-'saml|samltruststore|OIDC_CLIENT_ID|OIDC_ISSUER_URI|STCONF_ISOIDC|ST_AUTH_TOKEN|IDP_URL' \
+'saml|samltruststore|OIDC_CLIENT_ID|OIDC_ISSUER_URI|OIDC_SCOPES|STCONF_ISOIDC|STCONF_IDPURL|ST_AUTH_TOKEN|IDP_URL' \
 /tmp/oidc-compose.yml
 ```
 
@@ -401,6 +474,7 @@ Bei einer reinen OIDC-Konfiguration sollten unter anderem Werte wie diese ersche
 IDP_URL: ""
 OIDC_CLIENT_ID: sametime
 OIDC_ISSUER_URI: https://<KEYCLOAK>/realms/<REALM>
+OIDC_SCOPES: openid email profile
 STCONF_ISOIDC: "true"
 STI__ST_BB_NAMES__ST_AUTH_TOKEN: Fork:Jwt
 ```
@@ -463,6 +537,8 @@ Initializing delegate [0] [libStAuthTokenJwt]
 Sametime token authentication JWT library
 ```
 
+Direkt nach dem Start können einzelne Sametime Services noch nicht vollständig verfügbar sein. Entscheidend ist, dass sich der Community Server anschließend vollständig initialisiert.
+
 ---
 
 ## 16. Mux-Verbindung überprüfen
@@ -503,6 +579,7 @@ Erwartet werden beispielsweise:
 ```text
 OIDC_CLIENT_ID=sametime
 OIDC_ISSUER_URI=https://<KEYCLOAK>/realms/<REALM>
+OIDC_SCOPES=openid email profile
 STCONF_ISOIDC=true
 STI__ST_BB_NAMES__ST_AUTH_TOKEN=Fork:Jwt
 IDP_URL=
@@ -528,27 +605,31 @@ Mit `jq`:
 curl -s https://<SAMETIME-FQDN>/stwebapi/proxyinfo | jq
 ```
 
-Bei einer funktionierenden reinen OIDC-Konfiguration sollte der relevante Zustand beispielsweise so aussehen:
+Bei einer funktionierenden reinen OIDC-Konfiguration mit Mobile-Support sollte der relevante Zustand beispielsweise so aussehen:
 
 ```json
 {
   "isSAML": false,
   "isOIDC": true,
   "oidcIssuer": "https://<KEYCLOAK>/realms/<REALM>",
-  "communityConnected": true
+  "communityConnected": true,
+  "IDPUrl": "https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login"
 }
 ```
 
 Besonders wichtig:
 
 ```text
-isSAML            = false
-isOIDC            = true
-oidcIssuer         = OIDC_ISSUER_URI
+isSAML             = false
+isOIDC             = true
+oidcIssuer          = OIDC_ISSUER_URI
 communityConnected = true
+IDPUrl              = https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
 ```
 
-Bei OIDC kann `IDPUrl` leer sein. Dies ist nicht automatisch ein Konfigurationsfehler.
+> **Wichtig:** Für OIDC mit Mobile Clients sollte `IDPUrl` nicht leer sein.
+
+Ist `IDPUrl` leer, obwohl OIDC verwendet wird, sollte `STCONF_IDPURL` in `.env` geprüft werden.
 
 ---
 
@@ -590,7 +671,65 @@ Nach erfolgreicher Anmeldung sollten zusätzlich Chat, Präsenzstatus und Benutz
 
 ---
 
-## 20. Fehlersuche
+## 20. Mobile Client testen
+
+Nach erfolgreichem Web-Login sollte der Mobile Client separat getestet werden.
+
+Für Mobile Clients sind insbesondere diese Einstellungen relevant:
+
+```ini
+STCONF_ISOIDC=true
+STCONF_IDPURL=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+OIDC_SCOPES=openid email profile
+```
+
+Der erwartete Ablauf ist:
+
+```text
+Sametime Mobile Client
+        |
+        v
+Sametime Server
+        |
+        | /stwebapi/proxyinfo
+        |
+        | isOIDC=true
+        | oidcIssuer=<KEYCLOAK ISSUER>
+        | IDPUrl=<SAMETIME OIDC LOGIN>
+        v
+Sametime Auth Service
+        |
+        v
+Keycloak
+        |
+        | OIDC Login
+        v
+Sametime
+        |
+        v
+Mobile Client angemeldet
+```
+
+Wenn Web-OIDC funktioniert, der Mobile Client jedoch nicht, sollte als Erstes geprüft werden:
+
+```bash
+curl -s https://<SAMETIME-FQDN>/stwebapi/proxyinfo | jq
+```
+
+Insbesondere müssen folgende Werte korrekt sein:
+
+```text
+isSAML=false
+isOIDC=true
+oidcIssuer=<KEYCLOAK-ISSUER>
+IDPUrl=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+```
+
+Eine gemischte SAML-/OIDC-Konfiguration kann zu unerwartetem Verhalten des Mobile Clients führen.
+
+---
+
+## 21. Fehlersuche
 
 ### Aktive Konfiguration anzeigen
 
@@ -625,6 +764,15 @@ curl -s \
 curl -s https://<SAMETIME-FQDN>/stwebapi/proxyinfo | jq
 ```
 
+### OIDC Login URL testen
+
+```bash
+curl -I \
+  https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+```
+
+Der Endpunkt sollte den OIDC-Anmeldeprozess starten bzw. auf den Keycloak Authorization Endpoint weiterleiten.
+
 ### Community Logs
 
 ```bash
@@ -638,6 +786,21 @@ docker compose logs --tail=500 community
 ```bash
 docker compose logs community 2>&1 | \
 grep -Ei 'oidc|jwt|token|auth|error|exception|fail'
+```
+
+### Auth-Service Logs
+
+Bei OIDC-Problemen ist zusätzlich der Auth-Service wichtig:
+
+```bash
+docker compose logs --tail=500 auth
+```
+
+Gezielte Suche:
+
+```bash
+docker compose logs auth 2>&1 | \
+grep -Ei 'oidc|openid|passport|token|callback|auth|error|exception|fail'
 ```
 
 ### Mux überprüfen
@@ -662,7 +825,7 @@ grep -Ei 'OIDC|STCONF|IDP|AUTH'
 
 ---
 
-## 21. OIDC-Konfiguration mit `check-oidc.sh` prüfen
+## 22. OIDC-Konfiguration mit `check-oidc.sh` prüfen
 
 Für eine vollständige technische Prüfung kann das zusätzliche Check-Script verwendet werden.
 
@@ -681,16 +844,21 @@ Das Script überprüft unter anderem:
 - OIDC Client ID
 - OIDC Client Secret
 - OIDC Issuer URI
+- OIDC Scopes
+- `openid`, `email` und `profile`
 - Authorization Endpoint
 - Token Endpoint
 - UserInfo Endpoint
 - OIDC Discovery
 - JWKS Endpoint
+- `STCONF_IDPURL`
+- Sametime OIDC Login URL
 - deaktivierte SAML-Konfiguration
 - Docker-Compose-Konfiguration
 - laufende Container
 - OIDC-Environment der Container
 - `/stwebapi/proxyinfo`
+- `IDPUrl`
 - Verbindung zum Community Server
 
 Optional kann die Sametime-URL explizit angegeben werden:
@@ -710,7 +878,7 @@ STATUS: OK - OIDC-Konfiguration sieht konsistent aus
 
 ---
 
-## 22. Zwischen SAML und OIDC wechseln
+## 23. Zwischen SAML und OIDC wechseln
 
 Für Test- und Migrationsumgebungen kann es sinnvoll sein, vollständige Konfigurationssätze für SAML und OIDC getrennt aufzubewahren.
 
@@ -765,9 +933,11 @@ oder:
 ./check-saml.sh
 ```
 
+> **Wichtig:** Nach Änderungen an der funktionierenden OIDC-Konfiguration sollte auch der gespeicherte OIDC-Konfigurationssatz unter `auth-config/oidc/` aktualisiert werden.
+
 ---
 
-## 23. Besonders wichtig bei Sametime 12.0.4
+## 24. Besonders wichtig bei Sametime 12.0.4
 
 Für eine reine OIDC-Konfiguration sind insbesondere folgende Punkte zu beachten:
 
@@ -776,21 +946,31 @@ Für eine reine OIDC-Konfiguration sind insbesondere folgende Punkte zu beachten
 3. `OIDC_CLIENT_SECRET` muss dem tatsächlichen Keycloak Client Secret entsprechen.
 4. `OIDC_ISSUER_URI` muss exakt dem von Keycloak veröffentlichten `issuer` entsprechen.
 5. Authorization-, Token- und UserInfo-Endpoint sollten mit der OIDC Discovery übereinstimmen.
-6. Der JWKS Endpoint muss vom Sametime-Server erreichbar sein.
-7. `STI__ST_BB_NAMES__ST_AUTH_TOKEN` muss `Jwt` enthalten.
-8. Bei reiner OIDC-Konfiguration darf `Saml` nicht mehr in `ST_AUTH_TOKEN` enthalten sein.
-9. `IDP_URL` sollte für die reine OIDC-Konfiguration leer sein.
-10. `STCONF_IDPURL` sollte für die reine OIDC-Konfiguration leer sein.
-11. `saml.env` darf nicht mehr vom Community-Service eingebunden werden.
-12. Der SAML Truststore darf nicht mehr in den Community-Container gemountet werden.
-13. Nach Änderungen müssen die Container mit der neuen Environment-Konfiguration neu erstellt werden.
-14. `/stwebapi/proxyinfo` sollte `isOIDC=true` und `isSAML=false` melden.
-15. `oidcIssuer` muss dem konfigurierten `OIDC_ISSUER_URI` entsprechen.
-16. `communityConnected` sollte nach vollständigem Start `true` sein.
+6. `OIDC_SCOPES=openid email profile` sollte gesetzt sein.
+7. Der JWKS Endpoint muss vom Sametime-Server erreichbar sein.
+8. `STI__ST_BB_NAMES__ST_AUTH_TOKEN` muss `Jwt` enthalten.
+9. Bei reiner OIDC-Konfiguration darf `Saml` nicht mehr in `ST_AUTH_TOKEN` enthalten sein.
+10. `IDP_URL` sollte für die reine OIDC-Konfiguration leer sein.
+11. `STCONF_IDPURL` muss für OIDC mit Mobile Clients auf den Sametime OIDC Login zeigen.
+12. Der korrekte Wert lautet:
+
+    ```text
+    https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
+    ```
+
+13. `STCONF_IDPURL` darf für OIDC nicht auf den Keycloak-SAML- oder Keycloak-OIDC-Endpunkt zeigen.
+14. `saml.env` darf nicht mehr vom Community-Service eingebunden werden.
+15. Der SAML Truststore darf nicht mehr in den Community-Container gemountet werden.
+16. Nach Änderungen müssen die Container mit der neuen Environment-Konfiguration neu erstellt werden.
+17. `/stwebapi/proxyinfo` sollte `isOIDC=true` und `isSAML=false` melden.
+18. `oidcIssuer` muss dem konfigurierten `OIDC_ISSUER_URI` entsprechen.
+19. `IDPUrl` sollte dem konfigurierten `STCONF_IDPURL` entsprechen.
+20. `communityConnected` sollte nach vollständigem Start `true` sein.
+21. SAML und OIDC dürfen nicht gleichzeitig aktiv konfiguriert sein.
 
 ---
 
-## 24. Erwarteter Endzustand
+## 25. Erwarteter Endzustand
 
 Eine erfolgreich konfigurierte Installation kann mit `check-oidc.sh` beispielsweise folgenden Zustand liefern:
 
@@ -801,11 +981,12 @@ STCONF_ISOIDC=true
 OIDC_CLIENT_ID=sametime
 OIDC_CLIENT_SECRET=<gesetzt>
 OIDC_ISSUER_URI=https://<KEYCLOAK>/realms/<REALM>
+OIDC_SCOPES=openid email profile
 
-SAML
-----
+Authentifizierungsmodus / Mobile OIDC
+-------------------------------------
 IDP_URL=
-STCONF_IDPURL=
+STCONF_IDPURL=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
 ST_AUTH_TOKEN=Fork:Jwt
 saml.env nicht eingebunden
 SAML Truststore nicht eingebunden
@@ -823,6 +1004,7 @@ proxyinfo
 isSAML=false
 isOIDC=true
 oidcIssuer=https://<KEYCLOAK>/realms/<REALM>
+IDPUrl=https://<SAMETIME-FQDN>/sametime-auth/api/v1/oidc/login
 communityConnected=true
 
 Ergebnis
@@ -833,4 +1015,4 @@ Warnungen: 0
 STATUS: OK - OIDC-Konfiguration sieht konsistent aus
 ```
 
-Damit sind sowohl die statische Konfiguration als auch die von Sametime zur Laufzeit veröffentlichte OIDC-Konfiguration konsistent.
+Damit sind sowohl die statische OIDC-Konfiguration als auch die von Sametime zur Laufzeit veröffentlichte Konfiguration für Web- und Mobile-Clients konsistent.
