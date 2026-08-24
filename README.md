@@ -17,6 +17,11 @@ Community-maintained technical notes, configuration guides, troubleshooting info
   - SAML configuration guide
   - `check-saml.sh` configuration validation tool
 
+- [OIDC Integration with Keycloak under Docker](12.0.4/authentication/oidc-keycloak/)
+  - OpenID Connect configuration guide
+  - Keycloak OIDC configuration
+  - `check-oidc.sh` configuration validation tool
+
 ## Repository structure
 
 Each TechNote is stored together with its related scripts, examples, and other resources.
