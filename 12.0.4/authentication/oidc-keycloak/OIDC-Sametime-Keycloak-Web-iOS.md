@@ -474,23 +474,23 @@ Die zentrale Frage lautet:
 
 > Welchen Authentifizierungs- oder Token-Zustand verliert bzw. verwirft
 > der iOS Client beim Wechsel zwischen Background und Foreground?
-
+  
 ## 13. Browser und iOS im Vergleich
 
-                      Browser                   iOS
-  ------------------- ------------------------- ------------------------------
-  OIDC Provider       Keycloak                  Keycloak
-  Verfahren           Authorization Code Flow   Authorization Code Flow
-  Client              Web-Konfiguration         `sametime_mobile`
-  Mobile Client-Typ   --                        Public Client
-  Redirect            HTTPS                     `sametime://oauth2redirect`
-  Benutzerlogin       Keycloak                  Keycloak über iOS User Agent
-  Access Token        JWT                       JWT
-  Issuer              Keycloak                  Keycloak
-  `azp`               jeweiliger Web-Client     `sametime_mobile`
-  Audience            Sametime URL              `https://stlab1.inlakech.de`
-  Signaturprüfung     JWKS                      JWKS
-  Benutzer-Mapping    Sametime                  Sametime
+| Merkmal | Browser | iOS |
+|---|---|---|
+| OIDC Provider | Keycloak | Keycloak |
+| Verfahren | Authorization Code Flow | Authorization Code Flow |
+| Client | Web-Konfiguration | `sametime_mobile` |
+| Mobile Client-Typ | -- | Public Client |
+| Redirect | HTTPS | `sametime://oauth2redirect` |
+| Benutzerlogin | Keycloak | Keycloak über iOS User Agent |
+| Access Token | JWT | JWT |
+| Issuer | Keycloak | Keycloak |
+| `azp` | jeweiliger Web-Client | `sametime_mobile` |
+| Audience | Sametime URL | `https://stlab1.inlakech.de` |
+| Signaturprüfung | JWKS | JWKS |
+| Benutzer-Mapping | Sametime | Sametime |
 
 ## 14. Mentales Modell für das Debugging
 
